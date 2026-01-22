@@ -93,6 +93,43 @@
             border: 1px solid rgba(255, 255, 255, 0.3);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
         }
+        
+        /* Консоль для логов */
+        #log-console {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            width: 300px;
+            height: 200px;
+            background: rgba(0, 0, 0, 0.85);
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 11px;
+            font-family: monospace;
+            color: #0f0;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none; /* По умолчанию скрыта */
+        }
+        .log-entry {
+            margin-bottom: 4px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        #toggle-log {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: 1px solid #666;
+            border-radius: 5px;
+            padding: 5px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
 
         /* Блок результатов */
         #results-container {
@@ -178,23 +215,34 @@
         }
         
         /* Стили для скроллбара */
-        #results-container::-webkit-scrollbar {
+        #results-container::-webkit-scrollbar,
+        #log-console::-webkit-scrollbar {
             width: 6px;
         }
-        #results-container::-webkit-scrollbar-track {
+        #results-container::-webkit-scrollbar-track,
+        #log-console::-webkit-scrollbar-track {
             background: rgba(255, 255, 255, 0.1);
             border-radius: 3px;
         }
-        #results-container::-webkit-scrollbar-thumb {
+        #results-container::-webkit-scrollbar-thumb,
+        #log-console::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.3);
             border-radius: 3px;
         }
-        #results-container::-webkit-scrollbar-thumb:hover {
+        #results-container::-webkit-scrollbar-thumb:hover,
+        #log-console::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.4);
         }
     </style>
 </head>
 <body>
+    <!-- Кнопка переключения логов -->
+    <button id="toggle-log">📋 Лог</button>
+    
+    <!-- Консоль для логов -->
+    <div id="log-console"></div>
+    
+    <!-- Основной интерфейс -->
     <div id="app">
         <!-- Блок камеры -->
         <div id="video-container">
@@ -228,11 +276,50 @@
         </div>
     </div>
 
+    <!-- Скрытый audio для звуков -->
+    <audio id="scan-success-sound" preload="auto">
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="scan-error-sound" preload="auto">
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3" type="audio/mpeg">
+    </audio>
+
     <script>
         // Инициализация Telegram Web App
         if (window.Telegram && Telegram.WebApp) {
             Telegram.WebApp.ready();
         }
+
+        // Система логирования
+        const logConsole = document.getElementById('log-console');
+        const toggleLogBtn = document.getElementById('toggle-log');
+        
+        function logToConsole(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const colors = {
+                info: '#0f0',
+                error: '#f00',
+                warning: '#ff0',
+                success: '#0ff'
+            };
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.style.color = colors[type] || colors.info;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            
+            logConsole.appendChild(logEntry);
+            
+            // Автопрокрутка
+            logConsole.scrollTop = logConsole.scrollHeight;
+            
+            // Также в консоль браузера
+            console.log(`[${timestamp}] ${message}`);
+        }
+        
+        toggleLogBtn.addEventListener('click', () => {
+            logConsole.style.display = logConsole.style.display === 'none' ? 'block' : 'none';
+        });
 
         // Состояние приложения
         let step = 'datamatrix'; // 'datamatrix' или 'barcode'
@@ -241,115 +328,187 @@
         const resultsContainer = document.getElementById('results-container');
         const scanHintEl = document.getElementById('scan-hint');
         
-        // УЛУЧШЕННАЯ конфигурация для GS1 DataMatrix
+        // Звуки
+        const successSound = document.getElementById('scan-success-sound');
+        const errorSound = document.getElementById('scan-error-sound');
+        
+        function playSound(type) {
+            try {
+                if (type === 'success') {
+                    successSound.currentTime = 0;
+                    successSound.play();
+                } else if (type === 'error') {
+                    errorSound.currentTime = 0;
+                    errorSound.play();
+                }
+            } catch (e) {
+                console.log('Не удалось воспроизвести звук:', e);
+            }
+        }
+
+        // УЛУЧШЕННАЯ конфигурация для ВСЕХ форматов DataMatrix
         const config = {
-            fps: 15, // Увеличен FPS
+            fps: 20, // Увеличен FPS для плавности
             qrbox: {
-                width: 280, // Увеличенная область сканирования
-                height: 280
+                width: 300, // Большая область сканирования
+                height: 300
             },
             rememberLastUsedCamera: true,
             supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
             
-            // Расширенный список поддерживаемых форматов
+            // ВСЕ форматы штрих-кодов
             formatsToSupport: [
-                Html5QrcodeSupportedFormats.DATA_MATRIX, // Основной для УКЗ
-                Html5QrcodeSupportedFormats.EAN_13,       // Стандартные штрих-коды
-                Html5QrcodeSupportedFormats.CODE_128,     // Code 128
-                Html5QrcodeSupportedFormats.QR_CODE,      // QR коды
-                Html5QrcodeSupportedFormats.CODE_39,      // Дополнительные форматы
-                Html5QrcodeSupportedFormats.CODE_93,
-                Html5QrcodeSupportedFormats.CODABAR,
-                Html5QrcodeSupportedFormats.ITF,          // Для GS1
+                Html5QrcodeSupportedFormats.DATA_MATRIX, // Основной
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
                 Html5QrcodeSupportedFormats.UPC_A,
                 Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.CODE_93,
+                Html5QrcodeSupportedFormats.CODABAR,
+                Html5QrcodeSupportedFormats.ITF,
+                Html5QrcodeSupportedFormats.RSS_14,
+                Html5QrcodeSupportedFormats.RSS_EXPANDED,
                 Html5QrcodeSupportedFormats.PDF_417,
-                Html5QrcodeSupportedFormats.AZTEC
+                Html5QrcodeSupportedFormats.AZTEC,
+                Html5QrcodeSupportedFormats.MAXICODE,
+                Html5QrcodeSupportedFormats.QR_CODE
             ],
             
-            // Улучшенные настройки для камеры
+            // Улучшенные настройки камеры
             videoConstraints: {
-                width: { min: 640, ideal: 1280, max: 1920 },
-                height: { min: 480, ideal: 720, max: 1080 },
-                facingMode: { ideal: "environment" },
-                focusMode: "continuous" // Непрерывный автофокус
+                width: { min: 640, ideal: 1920, max: 2560 },
+                height: { min: 480, ideal: 1080, max: 1440 },
+                facingMode: { exact: "environment" },
+                focusMode: "continuous",
+                advanced: [
+                    { exposureMode: "continuous" },
+                    { whiteBalanceMode: "continuous" }
+                ]
             },
             
-            // Экспериментальные настройки для лучшего распознавания GS1
+            // Экспериментальные настройки
             experimentalFeatures: {
                 useBarCodeDetectorIfSupported: true,
-                defaultZoomValueIfSupported: 1.5
+                useBarCodeDetectorIfSupported: true // Дублирование для надежности
             }
         };
 
         // Инициализация сканера
         const html5QrCode = new Html5Qrcode("qr-reader");
         let isScanning = false;
-        let lastScannedCode = ''; // Для предотвращения дублирования
+        let lastScannedCode = '';
+        let lastScanTime = 0;
 
-        // Функция прокрутки к последнему результату
-        function scrollToLastResult() {
-            requestAnimationFrame(() => {
-                resultsContainer.scrollTop = resultsContainer.scrollHeight;
-            });
-        }
-
-        // Функция очистки FNC1 (GS) символов из GS1 DataMatrix
+        // Функция очистки FNC1 (GS) символов
         function cleanGS1Code(code) {
             // Удаляем символ FNC1 (GS, ASCII 29, hex 1D)
             return code.replace(/\u001d/g, '');
         }
 
-        // Функция анализа структуры DataMatrix
+        // Функция анализа ВСЕХ форматов DataMatrix согласно ТЗ
         function analyzeDataMatrix(code) {
             const cleanCode = cleanGS1Code(code);
-            let resultText = '';
+            const length = cleanCode.length;
             
-            // УКЗ DataMatrix: обычно 30 символов, последние 3 - буквы серии
-            if (cleanCode.length === 30) {
-                const series = cleanCode.substring(27, 30); // Последние 3 символа
+            logToConsole(`Анализ DataMatrix (${length} символов): ${cleanCode}`, 'info');
+            
+            // 1. САМОПЕЧАТАЕМЫЕ СТИКЕРЫ - 22 символа
+            if (length === 22 && /^\d{22}$/.test(cleanCode)) {
+                const id = cleanCode.substring(0, 9); // 9 цифр ID
+                const gtin = cleanCode.substring(9, 22); // 13 цифр GTIN
+                return {
+                    type: 'stickers',
+                    display: `Стикер (22): ${cleanCode}`,
+                    details: `ID: ${id}, GTIN: ${gtin}`,
+                    id: id,
+                    gtin: gtin
+                };
+            }
+            
+            // 2. УКЗ - 30 символов
+            else if (length === 30) {
+                // Формат: [18 любых символов][9 цифр номера][3 буквы серии]
+                const number = cleanCode.substring(18, 27); // Позиции 19-27 (9 цифр)
+                const series = cleanCode.substring(27, 30); // Позиции 28-30 (3 буквы)
                 
-                // Проверяем структуру
-                if (cleanCode.startsWith('01')) {
-                    // GS1 DataMatrix с GTIN
-                    const gtin = cleanCode.substring(2, 16); // GTIN 14 цифр
-                    const serial = cleanCode.substring(16, 27); // Серийный номер
-                    resultText = `DataMatrix УКЗ: ${cleanCode} (GTIN: ${gtin}, Серия: ${series})`;
+                // Проверяем что номер состоит из цифр, а серия из букв
+                if (/^\d{9}$/.test(number) && /^[A-Za-z]{3}$/.test(series)) {
+                    return {
+                        type: 'ukz',
+                        display: `УКЗ (30): ${cleanCode}`,
+                        details: `Номер: ${number}, Серия: ${series}`,
+                        number: number,
+                        series: series
+                    };
                 } else {
-                    // Другой формат УКЗ
-                    resultText = `DataMatrix УКЗ: ${cleanCode} (Серия: ${series})`;
+                    // Если не соответствует ожидаемому формату, но длина 30
+                    return {
+                        type: 'ukz_generic',
+                        display: `УКЗ (30): ${cleanCode}`,
+                        details: `Содержит буквы: ${cleanCode.match(/[A-Za-z]/g)?.join('') || 'нет'}`,
+                        raw: cleanCode
+                    };
                 }
-            }
-            // Стандартный DataMatrix 22 символа (только цифры)
-            else if (cleanCode.length === 22 && /^\d+$/.test(cleanCode)) {
-                const gtin = cleanCode.substring(9, 22);
-                resultText = `DataMatrix: ${cleanCode} (GTIN: ${gtin})`;
-            }
-            // DataMatrix для СИ 35 символов
-            else if (cleanCode.length === 35 && /^\d+$/.test(cleanCode)) {
-                const gtin = cleanCode.substring(3, 16);
-                resultText = `DataMatrix СИ: ${cleanCode} (GTIN: ${gtin})`;
-            }
-            // Другие форматы DataMatrix
-            else if (cleanCode.length >= 20 && cleanCode.length <= 50) {
-                resultText = `DataMatrix (${cleanCode.length}): ${cleanCode}`;
-                
-                // Пытаемся найти GTIN в любом месте кода
-                const gtinMatch = cleanCode.match(/(?:01)(\d{14})/);
-                if (gtinMatch) {
-                    resultText += ` (GTIN: ${gtinMatch[1]})`;
-                }
-            }
-            else {
-                resultText = `DataMatrix: ${cleanCode}`;
             }
             
-            return resultText;
+            // 3. СРЕДСТВА ИДЕНТИФИКАЦИИ (СИ) - 35 символов
+            else if (length === 35) {
+                // GTIN на позициях 4-16 (индексы 3-15 в JavaScript)
+                const gtin = cleanCode.substring(3, 16); // 13 цифр
+                
+                if (/^\d{13}$/.test(gtin)) {
+                    return {
+                        type: 'si',
+                        display: `СИ (35): ${cleanCode}`,
+                        details: `GTIN: ${gtin}`,
+                        gtin: gtin,
+                        fullCode: cleanCode
+                    };
+                } else {
+                    return {
+                        type: 'si_generic',
+                        display: `СИ (35): ${cleanCode}`,
+                        details: `Содержит любые символы`,
+                        raw: cleanCode
+                    };
+                }
+            }
+            
+            // 4. GS1 DataMatrix (может быть разной длины)
+            else if (cleanCode.includes('01') || cleanCode.includes('21') || 
+                     cleanCode.includes('17') || cleanCode.includes('10')) {
+                // Это GS1 DataMatrix с AI
+                const gtinMatch = cleanCode.match(/01(\d{14})/);
+                const serialMatch = cleanCode.match(/21([^\u001d]{1,20})/);
+                
+                return {
+                    type: 'gs1',
+                    display: `GS1 DataMatrix (${length}): ${cleanCode}`,
+                    details: gtinMatch ? `GTIN: ${gtinMatch[1]}` : `Код GS1`,
+                    gtin: gtinMatch ? gtinMatch[1] : null,
+                    serial: serialMatch ? serialMatch[1] : null
+                };
+            }
+            
+            // 5. Другие DataMatrix
+            else if (length >= 20 && length <= 50) {
+                return {
+                    type: 'other_datamatrix',
+                    display: `DataMatrix (${length}): ${cleanCode}`,
+                    details: `Длина: ${length} символов`,
+                    raw: cleanCode
+                };
+            }
+            
+            // Не DataMatrix
+            return null;
         }
 
-        // Функция добавления результата сканирования
-        function addResult(text, type) {
-            // Удаляем сообщение "Результаты сканирования появятся здесь"
+        // Функция добавления результата
+        function addResult(text, type, details = '') {
             const emptyMessage = resultsEl.querySelector('.empty-results');
             if (emptyMessage) {
                 emptyMessage.remove();
@@ -367,15 +526,29 @@
             const textSpan = document.createElement('span');
             textSpan.textContent = text;
             
+            if (details) {
+                const detailsSpan = document.createElement('div');
+                detailsSpan.style.fontSize = '12px';
+                detailsSpan.style.color = '#aaa';
+                detailsSpan.style.marginTop = '2px';
+                detailsSpan.textContent = details;
+                item.appendChild(detailsSpan);
+            }
+            
             item.appendChild(number);
             item.appendChild(icon);
             item.appendChild(textSpan);
             resultsEl.appendChild(item);
             
             scanCount++;
-            
-            // Прокручиваем к последнему результату
             scrollToLastResult();
+        }
+
+        // Функция прокрутки
+        function scrollToLastResult() {
+            requestAnimationFrame(() => {
+                resultsContainer.scrollTop = resultsContainer.scrollHeight;
+            });
         }
 
         // Функция обновления подсказки
@@ -389,24 +562,91 @@
                 scanHintEl.style.color = '#4da6ff';
                 scanHintEl.style.borderColor = 'rgba(77, 166, 255, 0.4)';
             }
+        }
+
+        // Обработчик сканирования
+        function onScanSuccess(decodedText) {
+            const code = decodedText.trim();
+            const now = Date.now();
             
-            // Визуальный эффект смены подсказки
-            scanHintEl.style.opacity = '0.7';
-            setTimeout(() => {
-                scanHintEl.style.opacity = '1';
-            }, 200);
+            // Защита от дублирования (не чаще чем раз в 500мс)
+            if (code === lastScannedCode && (now - lastScanTime) < 500) {
+                logToConsole('Игнорируем дубль', 'warning');
+                return;
+            }
+            
+            lastScannedCode = code;
+            lastScanTime = now;
+            
+            // Диагностика
+            const hex = Array.from(code)
+                .map(c => c.charCodeAt(0).toString(16).padStart(2, '0').toUpperCase())
+                .join(' ');
+            
+            logToConsole(`Сканирование: "${code}"`, 'info');
+            logToConsole(`Длина: ${code.length}, HEX: ${hex}`, 'info');
+            
+            let isValid = false;
+            let result = null;
+
+            if (step === 'datamatrix') {
+                // Анализируем DataMatrix
+                result = analyzeDataMatrix(code);
+                
+                if (result) {
+                    isValid = true;
+                    addResult(result.display, 'datamatrix', result.details);
+                    step = 'barcode';
+                    playSound('success');
+                    showScanFeedback(true, 'datamatrix');
+                    logToConsole(`✅ DataMatrix принят: ${result.type}`, 'success');
+                } else {
+                    logToConsole(`❌ Не DataMatrix (длина ${code.length})`, 'error');
+                    playSound('error');
+                }
+            } 
+            else if (step === 'barcode') {
+                // Проверяем штрих-коды
+                
+                // EAN-13 (13 цифр)
+                if (/^\d{13}$/.test(code)) {
+                    isValid = true;
+                    addResult(`Штрих-код EAN-13: ${code}`, 'barcode', `GTIN: ${code}`);
+                    step = 'datamatrix';
+                    playSound('success');
+                    showScanFeedback(true, 'barcode');
+                    logToConsole(`✅ Штрих-код принят: EAN-13`, 'success');
+                }
+                // Code 128 (буквы+цифры, 8-20 символов)
+                else if (/^[A-Za-z0-9]{8,20}$/.test(code)) {
+                    isValid = true;
+                    addResult(`Штрих-код: ${code}`, 'barcode');
+                    step = 'datamatrix';
+                    playSound('success');
+                    showScanFeedback(true, 'barcode');
+                    logToConsole(`✅ Штрих-код принят: Code 128`, 'success');
+                }
+                // EAN-8 (8 цифр)
+                else if (/^\d{8}$/.test(code)) {
+                    isValid = true;
+                    addResult(`Штрих-код EAN-8: ${code}`, 'barcode');
+                    step = 'datamatrix';
+                    playSound('success');
+                    showScanFeedback(true, 'barcode');
+                    logToConsole(`✅ Штрих-код принят: EAN-8`, 'success');
+                }
+                else {
+                    logToConsole(`❌ Не штрих-код: ${code}`, 'error');
+                    playSound('error');
+                }
+            }
+            
+            if (isValid) {
+                updateScanHint();
+            }
         }
 
-        // Функция очистки результатов
-        function clearResults() {
-            resultsEl.innerHTML = '<div class="empty-results">Результаты сканирования появятся здесь</div>';
-            step = 'datamatrix';
-            scanCount = 0;
-            lastScannedCode = '';
-            updateScanHint();
-        }
-
-        // Функция визуальной обратной связи
+        // Визуальная обратная связь
         function showScanFeedback(success, type) {
             const color = success ? (type === 'datamatrix' ? '#00ff9d' : '#4da6ff') : '#ff4444';
             
@@ -419,192 +659,81 @@
             }, 300);
         }
 
-        // Обработчик сканирования - ОБНОВЛЕННЫЙ ДЛЯ GS1 DataMatrix
-        function onScanSuccess(decodedText) {
-            const code = decodedText.trim();
-            
-            // Проверка на дублирование (предотвращаем повторное сканирование того же кода)
-            if (code === lastScannedCode) {
-                return;
-            }
-            lastScannedCode = code;
-            
-            // ДИАГНОСТИКА: Выводим информацию о считанном коде
-            console.log('🔍 СКАНИРОВАНИЕ:');
-            console.log('  Текст:', code);
-            console.log('  Длина:', code.length);
-            console.log('  Шаг:', step);
-            
-            // Выводим HEX представление для поиска FNC1
-            const hex = Array.from(code)
-                .map(c => c.charCodeAt(0).toString(16).padStart(2, '0').toUpperCase())
-                .join(' ');
-            console.log('  HEX:', hex);
-            
-            // Проверяем наличие FNC1 (GS символа)
-            const hasFNC1 = hex.includes('1D');
-            console.log('  FNC1 (GS) найден:', hasFNC1);
-            
-            let isValid = false;
-            let type = '';
-            let resultText = '';
-
-            // УПРОЩЕННАЯ ЛОГИКА ВАЛИДАЦИИ
-            if (step === 'datamatrix') {
-                // Принимаем как DataMatrix если:
-                // 1. Длина 20-50 символов (основные форматы DataMatrix)
-                // 2. ИЛИ содержит FNC1 (GS1 DataMatrix)
-                // 3. ИЛИ длина 30 символов (специфично для УКЗ)
-                
-                const isDataMatrixLength = code.length >= 20 && code.length <= 50;
-                const isUKZLength = code.length === 30;
-                
-                if (isDataMatrixLength || hasFNC1 || isUKZLength) {
-                    isValid = true;
-                    type = 'datamatrix';
-                    resultText = analyzeDataMatrix(code);
-                    
-                    addResult(resultText, type);
-                    step = 'barcode'; // Следующий шаг - штрих-код
-                    
-                    showScanFeedback(true, 'datamatrix');
-                    console.log('✅ Принят как DataMatrix');
-                } else {
-                    console.log('❌ Не DataMatrix: длина', code.length, 'символов');
-                }
-            } 
-            else if (step === 'barcode') {
-                // Проверяем штрих-коды
-                
-                // EAN-13: 13 цифр
-                if (/^\d{13}$/.test(code)) {
-                    isValid = true;
-                    type = 'barcode';
-                    resultText = `Штрих-код EAN-13: ${code}`;
-                }
-                // Code 128: алфавитно-цифровой, 8-20 символов
-                else if (/^[A-Za-z0-9]{8,20}$/.test(code) && !/^\d+$/.test(code)) {
-                    isValid = true;
-                    type = 'barcode';
-                    resultText = `Штрих-код: ${code}`;
-                }
-                // EAN-8: 8 цифр
-                else if (/^\d{8}$/.test(code)) {
-                    isValid = true;
-                    type = 'barcode';
-                    resultText = `Штрих-код EAN-8: ${code}`;
-                }
-                // UPC-A: 12 цифр
-                else if (/^\d{12}$/.test(code)) {
-                    isValid = true;
-                    type = 'barcode';
-                    resultText = `Штрих-код UPC-A: ${code}`;
-                }
-                
-                if (isValid) {
-                    addResult(resultText, type);
-                    step = 'datamatrix'; // Следующий шаг - DataMatrix
-                    showScanFeedback(true, 'barcode');
-                    console.log('✅ Принят как штрих-код');
-                } else {
-                    console.log('❌ Не штрих-код: формат не распознан');
-                }
-            }
-            
-            if (isValid) {
-                updateScanHint();
-            }
-            
-            // Задержка перед следующим сканированием (предотвращение дублей)
-            setTimeout(() => {
-                lastScannedCode = '';
-            }, 1000);
-        }
-
         // Начало сканирования
         function startScanner() {
             if (isScanning) return;
             
-            console.log('🚀 Инициализация сканера...');
+            logToConsole('Инициализация сканера...', 'info');
             
-            Html5Qrcode.getCameras().then(devices => {
-                if (devices && devices.length) {
-                    console.log('📷 Найдено камер:', devices.length);
-                    
-                    let cameraId = devices[0].id;
-                    
-                    // Пытаемся найти заднюю камеру
-                    const backCamera = devices.find(device => 
-                        device.label.toLowerCase().includes('back') || 
-                        device.label.toLowerCase().includes('rear') ||
-                        device.label.includes('2') || // Часто задняя камера под индексом 2
-                        device.label.includes('1') && !device.label.toLowerCase().includes('front')
-                    );
-                    
-                    if (backCamera) {
-                        cameraId = backCamera.id;
-                        console.log('📡 Используем заднюю камеру:', backCamera.label);
-                    } else {
-                        console.log('📡 Используем первую камеру:', devices[0].label);
-                    }
-                    
-                    html5QrCode.start(
-                        cameraId,
-                        config,
-                        onScanSuccess,
-                        (errorMessage) => {
-                            // Игнорируем большинство ошибок сканирования
-                            if (!errorMessage.includes('NotFoundException')) {
-                                console.log('⚠️ Ошибка сканирования:', errorMessage);
-                            }
-                        }
-                    ).then(() => {
-                        isScanning = true;
-                        console.log('✅ Сканер запущен успешно');
-                    }).catch(err => {
-                        console.error("❌ Ошибка запуска камеры:", err);
-                        scanHintEl.textContent = 'Ошибка камеры. Проверьте разрешения.';
-                        scanHintEl.style.color = '#ff4444';
-                    });
-                } else {
-                    console.error('❌ Камеры не найдены');
-                    scanHintEl.textContent = 'Камера не найдена';
-                    scanHintEl.style.color = '#ff4444';
-                }
-            }).catch(err => {
-                console.error('❌ Ошибка получения камер:', err);
-                // Пробуем запустить с настройками по умолчанию
+            // Пробуем несколько стратегий запуска камеры
+            const startWithConstraints = (constraints) => {
                 html5QrCode.start(
-                    { facingMode: "environment" },
+                    constraints,
                     config,
                     onScanSuccess,
-                    (errorMessage) => {
-                        console.log('⚠️ Ошибка сканирования:', errorMessage);
+                    (error) => {
+                        if (!error.includes('NotFoundException')) {
+                            logToConsole(`Сканирование: ${error}`, 'warning');
+                        }
                     }
                 ).then(() => {
                     isScanning = true;
-                    console.log('✅ Сканер запущен (через facingMode)');
-                }).catch(err2 => {
-                    console.error('❌ Не удалось запустить камеру:', err2);
-                    scanHintEl.textContent = 'Не удалось запустить камеру';
+                    logToConsole('✅ Сканер запущен', 'success');
+                }).catch(err => {
+                    logToConsole(`❌ Ошибка: ${err.message}`, 'error');
+                    scanHintEl.textContent = 'Ошибка камеры';
                     scanHintEl.style.color = '#ff4444';
                 });
+            };
+            
+            // Пытаемся получить конкретную камеру
+            Html5Qrcode.getCameras().then(devices => {
+                if (devices.length > 0) {
+                    // Ищем заднюю камеру
+                    const backCamera = devices.find(d => 
+                        d.label.toLowerCase().includes('back') || 
+                        d.label.toLowerCase().includes('rear')
+                    );
+                    
+                    if (backCamera) {
+                        logToConsole(`Найдена задняя камера: ${backCamera.label}`, 'info');
+                        startWithConstraints(backCamera.id);
+                    } else {
+                        logToConsole(`Используем первую камеру: ${devices[0].label}`, 'info');
+                        startWithConstraints(devices[0].id);
+                    }
+                } else {
+                    // Используем facingMode как запасной вариант
+                    logToConsole('Камеры не найдены, используем facingMode', 'warning');
+                    startWithConstraints({ facingMode: "environment" });
+                }
+            }).catch(err => {
+                logToConsole(`Ошибка получения камер: ${err}`, 'error');
+                // Прямой запуск с facingMode
+                startWithConstraints({ facingMode: "environment" });
             });
         }
 
         // Обработчики кнопок
-        document.getElementById('clear-btn').onclick = clearResults;
+        document.getElementById('clear-btn').onclick = () => {
+            resultsEl.innerHTML = '<div class="empty-results">Результаты сканирования появятся здесь</div>';
+            step = 'datamatrix';
+            scanCount = 0;
+            lastScannedCode = '';
+            updateScanHint();
+            logToConsole('Результаты очищены', 'info');
+        };
         
         document.getElementById('finish-btn').onclick = () => {
             if (isScanning) {
                 html5QrCode.stop().then(() => {
                     isScanning = false;
-                    console.log('🛑 Сканер остановлен');
+                    logToConsole('Сканер остановлен', 'info');
                     if (window.Telegram && Telegram.WebApp) {
                         Telegram.WebApp.close();
                     }
                 }).catch(err => {
-                    console.error('❌ Ошибка при остановке камеры:', err);
+                    logToConsole(`Ошибка остановки: ${err}`, 'error');
                     if (window.Telegram && Telegram.WebApp) {
                         Telegram.WebApp.close();
                     }
@@ -616,16 +745,13 @@
             }
         };
 
-        // Инициализация подсказки
+        // Инициализация
         updateScanHint();
-
-        // Запускаем сканер при загрузке
         startScanner();
 
-        // Добавляем CSS для скрытия дублирующего квадрата сканера
+        // CSS для скрытия интерфейса библиотеки
         const style = document.createElement('style');
         style.textContent = `
-            /* Скрываем стандартный интерфейс библиотеки */
             #qr-reader__dashboard_section,
             #qr-reader__camera_permission_button,
             #qr-reader__scan_region,
@@ -634,21 +760,18 @@
                 display: none !important;
             }
             
-            /* Видео на весь экран */
             #qr-reader video {
                 width: 100% !important;
                 height: 100% !important;
                 object-fit: cover !important;
             }
             
-            /* Убираем все рамки */
             #qr-reader > * {
                 border: none !important;
                 outline: none !important;
                 box-shadow: none !important;
             }
             
-            /* Убираем канвас если есть */
             #qr-reader__scan_region_canvas {
                 display: none !important;
             }
