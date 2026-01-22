@@ -76,41 +76,48 @@
             border-right: 4px solid white;
             border-bottom: 4px solid white;
         }
-        /* Подсказка */
+        /* Подсказка - ПЕРЕМЕЩЕНА НИЖЕ */
         #scan-hint {
             position: absolute;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, 100px);
-            width: 240px;
+            transform: translate(-50%, 160px); /* Сместили ниже квадрата */
+            width: 260px;
             text-align: center;
             color: white;
-            font-size: 14px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 8px 12px;
-            border-radius: 8px;
+            font-size: 15px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 15px;
+            border-radius: 10px;
             z-index: 10;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
         }
 
-        /* Блок результатов */
+        /* Блок результатов - УВЕЛИЧЕН */
         #results-container {
-            background: rgba(30, 30, 30, 0.95);
+            background: rgba(25, 25, 25, 0.95);
             border-top: 1px solid #444;
             border-bottom: 1px solid #444;
             padding: 12px;
-            min-height: 100px;
-            max-height: 120px;
+            min-height: 120px;
+            max-height: 140px; /* Увеличенная высота */
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
         }
         #results {
             font-size: 14px;
             line-height: 1.5;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
         }
         .result-item {
             margin-bottom: 8px;
-            padding-bottom: 8px;
+            padding: 6px 0;
             border-bottom: 1px solid #333;
+            flex-shrink: 0;
         }
         .result-item:last-child {
             margin-bottom: 0;
@@ -127,6 +134,10 @@
             font-style: italic;
             text-align: center;
             padding: 20px 0;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         /* Панель управления */
@@ -164,6 +175,22 @@
             opacity: 0.6;
             cursor: not-allowed;
             transform: none !important;
+        }
+        
+        /* Стили для скроллбара */
+        #results-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        #results-container::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        #results-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+        #results-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.4);
         }
     </style>
 </head>
@@ -211,6 +238,7 @@
         let step = 'datamatrix'; // 'datamatrix' или 'barcode'
         let scanCount = 0;
         const resultsEl = document.getElementById('results');
+        const resultsContainer = document.getElementById('results-container');
         const scanHintEl = document.getElementById('scan-hint');
         
         // Конфигурация сканера
@@ -233,6 +261,16 @@
         // Инициализация сканера
         const html5QrCode = new Html5Qrcode("qr-reader");
         let isScanning = false;
+
+        // Функция прокрутки к последнему результату
+        function scrollToLastResult() {
+            // Используем requestAnimationFrame для гарантированной прокрутки после добавления DOM
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    resultsContainer.scrollTop = resultsContainer.scrollHeight;
+                });
+            });
+        }
 
         // Функция добавления результата сканирования
         function addResult(text, type) {
@@ -259,10 +297,13 @@
             item.appendChild(textSpan);
             resultsEl.appendChild(item);
             
-            // Прокручиваем к последнему результату
-            resultsEl.scrollTop = resultsEl.scrollHeight;
-            
             scanCount++;
+            
+            // Прокручиваем к последнему результату
+            scrollToLastResult();
+            
+            // Обновляем подсказку
+            updateScanHint();
         }
 
         // Функция обновления подсказки
@@ -270,18 +311,18 @@
             if (step === 'datamatrix') {
                 scanHintEl.textContent = 'Наведите на DataMatrix';
                 scanHintEl.style.color = '#00ff9d';
-                scanHintEl.style.borderColor = 'rgba(0, 255, 157, 0.3)';
+                scanHintEl.style.borderColor = 'rgba(0, 255, 157, 0.4)';
             } else {
                 scanHintEl.textContent = 'Наведите на штрих-код';
                 scanHintEl.style.color = '#4da6ff';
-                scanHintEl.style.borderColor = 'rgba(77, 166, 255, 0.3)';
+                scanHintEl.style.borderColor = 'rgba(77, 166, 255, 0.4)';
             }
             
             // Визуальный эффект смены подсказки
             scanHintEl.style.opacity = '0.7';
             setTimeout(() => {
                 scanHintEl.style.opacity = '1';
-            }, 300);
+            }, 200);
         }
 
         // Функция очистки результатов
@@ -320,12 +361,13 @@
                     
                     addResult(resultText, 'datamatrix');
                     step = 'barcode'; // Следующий шаг - штрих-код
-                    updateScanHint(); // Обновляем подсказку
                     
                     // Визуальная обратная связь
-                    scanHintEl.style.background = 'rgba(0, 100, 0, 0.8)';
+                    scanHintEl.style.background = 'rgba(0, 80, 0, 0.9)';
+                    scanHintEl.style.boxShadow = '0 4px 15px rgba(0, 255, 157, 0.3)';
                     setTimeout(() => {
-                        scanHintEl.style.background = 'rgba(0, 0, 0, 0.7)';
+                        scanHintEl.style.background = 'rgba(0, 0, 0, 0.8)';
+                        scanHintEl.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.5)';
                     }, 300);
                 }
             } else if (step === 'barcode') {
@@ -334,12 +376,13 @@
                     isValid = true;
                     addResult(`Штрих-код: ${code}`, 'barcode');
                     step = 'datamatrix'; // Следующий шаг - DataMatrix
-                    updateScanHint(); // Обновляем подсказку
                     
                     // Визуальная обратная связь
-                    scanHintEl.style.background = 'rgba(0, 0, 100, 0.8)';
+                    scanHintEl.style.background = 'rgba(0, 0, 80, 0.9)';
+                    scanHintEl.style.boxShadow = '0 4px 15px rgba(77, 166, 255, 0.3)';
                     setTimeout(() => {
-                        scanHintEl.style.background = 'rgba(0, 0, 0, 0.7)';
+                        scanHintEl.style.background = 'rgba(0, 0, 0, 0.8)';
+                        scanHintEl.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.5)';
                     }, 300);
                 }
             }
@@ -456,20 +499,22 @@
                 object-fit: cover !important;
             }
             
-            @keyframes scanSuccess {
-                0% { transform: translate(-50%, 100px) scale(1); }
-                50% { transform: translate(-50%, 100px) scale(1.05); }
-                100% { transform: translate(-50%, 100px) scale(1); }
-            }
-            .scan-success {
-                animation: scanSuccess 0.3s ease-in-out;
-            }
-            
             /* Убираем все рамки и границы от библиотеки */
             #qr-reader > * {
                 border: none !important;
                 outline: none !important;
                 box-shadow: none !important;
+            }
+            
+            /* Анимация для подсказки */
+            @keyframes hintPulse {
+                0% { transform: translate(-50%, 160px) scale(1); }
+                50% { transform: translate(-50%, 160px) scale(1.02); }
+                100% { transform: translate(-50%, 160px) scale(1); }
+            }
+            
+            .hint-pulse {
+                animation: hintPulse 0.3s ease-in-out;
             }
         `;
         document.head.appendChild(style);
