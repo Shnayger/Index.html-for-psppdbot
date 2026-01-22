@@ -35,7 +35,7 @@
             height: 100%;
             object-fit: cover;
         }
-        /* Уголки квадрата (L-образные, как на скриншоте) */
+        /* Уголки квадрата */
         .corner {
             position: absolute;
             pointer-events: none;
@@ -86,7 +86,7 @@
             line-height: 1.4;
             white-space: pre-wrap;
             word-break: break-all;
-            color: white; /* ← Белый текст */
+            color: white;
         }
 
         /* Кнопки */
@@ -141,7 +141,7 @@
             Telegram.WebApp.ready();
         }
 
-        let step = 'datamatrix'; // 'datamatrix' или 'barcode'
+        let step = 'datamatrix';
         const resultsEl = document.getElementById('results');
 
         function addResult(text) {
@@ -194,7 +194,7 @@
                 } else if (step === 'barcode') {
                     if (/^\d{13}$/.test(code)) {
                         addResult(`🛒 Штрих-код: ${code}`);
-                        step = 'datamatrix'; // ← Ждём только DataMatrix
+                        step = 'datamatrix'; // ← Ждём снова DataMatrix
                     }
                 }
             },
