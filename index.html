@@ -2,67 +2,85 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Проверка стикера</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
-        body {
+        * {
+            box-sizing: border-box;
             margin: 0;
-            padding: 15px;
+            padding: 0;
+        }
+        html, body {
+            height: 100%;
+            overflow: hidden; /* ← Отключаем прокрутку всей страницы */
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #f8f9fa;
             color: #333;
         }
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 10px;
+        }
         h2 {
             text-align: center;
-            margin: 10px 0 15px;
-            font-size: 20px;
+            margin: 8px 0 12px;
+            font-size: 18px;
+            font-weight: 600;
         }
         #reader {
             width: 100%;
-            max-width: 500px;
-            margin: 0 auto;
+            aspect-ratio: 4/3;
             border: 2px solid #007bff;
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            background: black;
         }
-        #results {
-            margin-top: 15px;
-            padding: 12px;
+        #results-container {
+            flex: 1;
+            margin: 12px 0;
+            max-height: 200px;
+            overflow-y: auto; /* ← Скролл только здесь */
+            padding: 8px;
             background: white;
             border-radius: 10px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            min-height: 60px;
+        }
+        #results {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
         }
         .result-item {
-            margin: 6px 0;
             padding: 6px 10px;
             border-radius: 6px;
             font-family: monospace;
-            font-size: 14px;
+            font-size: 13px;
             word-break: break-all;
         }
         .datamatrix { background-color: #e3f2fd; border-left: 4px solid #2196f3; }
         .barcode { background-color: #f1f8e9; border-left: 4px solid #4caf50; }
         .parsed { background-color: #fff3e0; border-left: 4px solid #ff9800; }
         #status {
-            margin-top: 12px;
-            font-size: 16px;
+            margin: 8px 0;
+            font-size: 15px;
             font-weight: bold;
             text-align: center;
-            min-height: 22px;
+            min-height: 20px;
             color: #1a237e;
         }
         #controls {
             display: flex;
             gap: 10px;
-            margin-top: 15px;
-            justify-content: center;
+            margin-top: auto; /* ← Прижимает к низу */
         }
         button {
-            padding: 10px 16px;
+            flex: 1;
+            padding: 12px;
             border: none;
             border-radius: 8px;
             font-size: 15px;
@@ -73,31 +91,34 @@
         #finish-btn {
             background: #007bff;
             color: white;
-            flex: 1;
-            max-width: 200px;
         }
         #clear-btn {
             background: #6c757d;
             color: white;
-            flex: 1;
-            max-width: 200px;
         }
         button:hover {
             opacity: 0.9;
         }
+        button:active {
+            transform: scale(0.98);
+        }
     </style>
 </head>
 <body>
-    <h2>🔍 Проверка стикера</h2>
-    <div id="reader"></div>
-    
-    <div id="results"></div>
-    
-    <div id="status">Наведите камеру на DataMatrix</div>
-    
-    <div id="controls">
-        <button id="clear-btn">🗑️ Очистить</button>
-        <button id="finish-btn">✅ Завершить</button>
+    <div id="app">
+        <h2>🔍 Проверка стикера</h2>
+        <div id="reader"></div>
+        
+        <div id="results-container">
+            <div id="results"></div>
+        </div>
+        
+        <div id="status">Наведите камеру на DataMatrix</div>
+        
+        <div id="controls">
+            <button id="clear-btn">🗑️ Очистить</button>
+            <button id="finish-btn">✅ Завершить</button>
+        </div>
     </div>
 
     <script>
@@ -106,16 +127,15 @@
         }
 
         let step = 'datamatrix'; // 'datamatrix' или 'barcode'
-        let isScanning = true; // Флаг активного сканирования
         const resultsEl = document.getElementById('results');
         const statusEl = document.getElementById('status');
         const readerEl = document.getElementById('reader');
 
         // Функция добавления результата
-        function addResult(type, text, extra = '') {
+        function addResult(type, label, value) {
             const div = document.createElement('div');
             div.className = `result-item ${type}`;
-            div.textContent = `${text}${extra ? ' → ' + extra : ''}`;
+            div.textContent = `${label}: ${value}`;
             resultsEl.appendChild(div);
             resultsEl.scrollTop = resultsEl.scrollHeight;
         }
@@ -124,9 +144,7 @@
         function clearResults() {
             resultsEl.innerHTML = '';
             step = 'datamatrix';
-            isScanning = true;
             statusEl.textContent = 'Наведите камеру на DataMatrix';
-            // Перезапуск сканера (если нужно)
         }
 
         // Конфигурация сканера
@@ -146,50 +164,40 @@
             { facingMode: "environment" },
             config,
             (decodedText) => {
-                // Защита от повторного сканирования
-                if (!isScanning) return;
-
                 const code = decodedText.trim();
-                if (step === 'datamatrix') {
-                    isScanning = false; // Останавливаем сканирование
-                    addResult('datamatrix', '📦 DataMatrix:', code);
 
-                    // === ПАРСИНГ ===
-                    if (code.length === 22) {
-                        const uniqueId = code.substring(0, 9);
-                        const gtin = code.substring(9, 22);
-                        addResult('parsed', '🔢 Уникальный ID:', uniqueId);
-                        addResult('parsed', '🏷️ GTIN:', gtin);
+                if (step === 'datamatrix') {
+                    // Принимаем ТОЛЬКО DataMatrix (22, 30, 35 символов)
+                    if ([22, 30, 35].includes(code.length)) {
+                        addResult('datamatrix', '📦 DataMatrix', code);
+                        
+                        // Парсинг
+                        if (code.length === 22) {
+                            addResult('parsed', '🔢 ID', code.substring(0, 9));
+                            addResult('parsed', '🏷️ GTIN', code.substring(9, 22));
+                        } else if (code.length === 30) {
+                            addResult('parsed', '🔢 Номер УКЗ', code.substring(18, 27));
+                            addResult('parsed', '🔤 Серия', code.substring(27, 30));
+                        } else if (code.length === 35) {
+                            addResult('parsed', '🏷️ GTIN из СИ', code.substring(3, 16));
+                        }
+                        
                         statusEl.textContent = '✅ DataMatrix распознан. Наведите на штрих-код.';
-                        step = 'barcode';
-                        isScanning = true; // Возобновляем сканирование для штрих-кода
-                    } else if (code.length === 30) {
-                        const number = code.substring(18, 27);
-                        const series = code.substring(27, 30);
-                        addResult('parsed', '🔢 Номер УКЗ:', number);
-                        addResult('parsed', '🔤 Серия УКЗ:', series);
-                        statusEl.textContent = '✅ УКЗ распознан. Наведите на штрих-код.';
-                        step = 'barcode';
-                        isScanning = true;
-                    } else if (code.length === 35) {
-                        const gtin = code.substring(3, 16);
-                        addResult('parsed', '🏷️ GTIN из СИ:', gtin);
-                        statusEl.textContent = '✅ СИ распознан. Наведите на штрих-код.';
-                        step = 'barcode';
-                        isScanning = true;
-                    } else {
-                        statusEl.textContent = `❌ Неизвестный формат (${code.length} символов)`;
-                        isScanning = true;
+                        step = 'barcode'; // ← Переключаемся на штрих-код
                     }
+                    // Игнорируем всё остальное в режиме DataMatrix
                 } else if (step === 'barcode') {
-                    isScanning = false; // Останавливаем после штрих-кода
-                    addResult('barcode', '🛒 Штрих-код:', code);
-                    statusEl.textContent = '✅ Сканирование завершено!';
-                    
-                    // Автоматический сброс через 3 секунды
-                    setTimeout(() => {
-                        clearResults();
-                    }, 30000);
+                    // Принимаем ТОЛЬКО штрих-код (13 цифр)
+                    if (/^\d{13}$/.test(code)) {
+                        addResult('barcode', '🛒 Штрих-код', code);
+                        statusEl.textContent = '✅ Сканирование завершено!';
+                        
+                        // Автоматический сброс через 2.5 сек
+                        setTimeout(() => {
+                            clearResults();
+                        }, 2500);
+                    }
+                    // Игнорируем всё остальное в режиме штрих-кода
                 }
             },
             (errorMessage) => {
@@ -202,16 +210,7 @@
 
         // Кнопки
         document.getElementById('clear-btn').onclick = () => {
-            html5QrCode.stop().then(() => {
-                clearResults();
-                // Перезапуск сканера
-                html5QrCode.start(
-                    { facingMode: "environment" },
-                    config,
-                    (decodedText) => { /* тот же callback */ },
-                    (err) => {}
-                );
-            });
+            clearResults();
         };
         
         document.getElementById('finish-btn').onclick = () => {
