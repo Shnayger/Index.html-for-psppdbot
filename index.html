@@ -27,7 +27,7 @@
         #video-container {
             position: relative;
             width: 100%;
-            height: calc(100% - 180px); /* Оставляем место под результаты и кнопки */
+            flex: 1;
             overflow: hidden;
         }
         #reader {
@@ -35,32 +35,19 @@
             height: 100%;
             object-fit: cover;
         }
-        /* Квадрат наводки */
-        #scan-frame {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 220px;
-            height: 220px;
-            transform: translate(-50%, -50%);
-            border: 3px solid #00ff41;
-            border-radius: 12px;
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
-            pointer-events: none;
-            z-index: 10;
-        }
-        /* Угловые маркеры (как в настоящих сканерах) */
+        /* Уголки квадрата */
         .corner {
             position: absolute;
-            width: 24px;
-            height: 24px;
+            width: 28px;
+            height: 28px;
             border-color: #00ff41;
             border-style: solid;
+            pointer-events: none;
         }
-        .corner-tl { top: -3px; left: -3px; border-width: 3px 0 0 3px; }
-        .corner-tr { top: -3px; right: -3px; border-width: 3px 3px 0 0; }
-        .corner-bl { bottom: -3px; left: -3px; border-width: 0 0 3px 3px; }
-        .corner-br { bottom: -3px; right: -3px; border-width: 0 3px 3px 0; }
+        .corner-tl { top: 20%; left: 20%; border-width: 3px 0 0 3px; }
+        .corner-tr { top: 20%; right: 20%; border-width: 3px 3px 0 0; }
+        .corner-bl { bottom: 20%; left: 20%; border-width: 0 0 3px 3px; }
+        .corner-br { bottom: 20%; right: 20%; border-width: 0 3px 3px 0; }
 
         /* Поле результатов */
         #results {
@@ -74,15 +61,6 @@
             line-height: 1.4;
             white-space: pre-wrap;
             word-break: break-all;
-        }
-
-        /* Статус */
-        #status {
-            padding: 10px;
-            text-align: center;
-            font-size: 15px;
-            font-weight: bold;
-            background: rgba(0, 0, 0, 0.7);
         }
 
         /* Кнопки */
@@ -118,16 +96,14 @@
     <div id="app">
         <div id="video-container">
             <div id="reader"></div>
-            <div id="scan-frame">
-                <div class="corner corner-tl"></div>
-                <div class="corner corner-tr"></div>
-                <div class="corner corner-bl"></div>
-                <div class="corner corner-br"></div>
-            </div>
+            <div class="corner corner-tl"></div>
+            <div class="corner corner-tr"></div>
+            <div class="corner corner-bl"></div>
+            <div class="corner corner-br"></div>
         </div>
         
         <div id="results"></div>
-        <div id="status">Наведите DataMatrix в квадрат</div>
+        
         <div id="controls">
             <button id="clear-btn">🗑️ Очистить</button>
             <button id="finish-btn">✅ Завершить</button>
@@ -139,9 +115,8 @@
             Telegram.WebApp.ready();
         }
 
-        let step = 'datamatrix';
+        let step = 'datamatrix'; // 'datamatrix' или 'barcode'
         const resultsEl = document.getElementById('results');
-        const statusEl = document.getElementById('status');
 
         function addResult(text) {
             const div = document.createElement('div');
@@ -153,13 +128,12 @@
         function clearResults() {
             resultsEl.innerHTML = '';
             step = 'datamatrix';
-            statusEl.textContent = 'Наведите DataMatrix в квадрат';
         }
 
-        // Конфигурация: Включаем qrbox для лучшего распознавания
+        // Конфигурация: qrbox для точного распознавания
         const config = {
             fps: 12,
-            qrbox: { width: 220, height: 220 }, // ← Размер квадрата
+            qrbox: { width: 240, height: 240 },
             aspectRatio: 1.7777778,
             disableFlip: false,
             experimentalFeatures: {
@@ -178,31 +152,23 @@
                     if ([22, 30, 35].includes(code.length)) {
                         addResult(`📦 DataMatrix: ${code}`);
                         
-                        let msg = '✅ Распознан';
                         if (code.length === 22) {
                             const gtin = code.substring(9, 22);
                             addResult(`🏷️ GTIN: ${gtin}`);
-                            msg += ` (GTIN: ${gtin})`;
                         } else if (code.length === 30) {
                             const series = code.substring(27, 30);
-                            addResult(`🔤 Серия: ${series}`);
-                            msg += ` (УКЗ: ${series})`;
+                            addResult(`🔤 Серия УКЗ: ${series}`);
                         } else if (code.length === 35) {
                             const gtin = code.substring(3, 16);
-                            addResult(`🏷️ GTIN: ${gtin}`);
-                            msg += ` (СИ)`;
+                            addResult(`🏷️ GTIN (СИ): ${gtin}`);
                         }
                         
-                        statusEl.textContent = `${msg}. Наведите штрих-код.`;
-                        step = 'barcode';
+                        step = 'barcode'; // ← Ждём только штрих-код
                     }
                 } else if (step === 'barcode') {
                     if (/^\d{13}$/.test(code)) {
                         addResult(`🛒 Штрих-код: ${code}`);
-                        statusEl.textContent = '✅ Верно!';
-                        setTimeout(() => {
-                            clearResults();
-                        }, 2500);
+                        step = 'datamatrix'; // ← Ждём только DataMatrix
                     }
                 }
             },
@@ -210,8 +176,7 @@
                 // Игнорируем ошибки
             }
         ).catch(err => {
-            statusEl.textContent = "❌ Ошибка камеры";
-            console.error("Не удалось запустить камеру:", err);
+            console.error("Ошибка камеры:", err);
         });
 
         document.getElementById('clear-btn').onclick = clearResults;
