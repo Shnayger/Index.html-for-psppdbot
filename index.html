@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Проверка стикера</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@latest"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
         * {
@@ -254,7 +255,10 @@
                 Html5QrcodeSupportedFormats.DATA_MATRIX,
                 Html5QrcodeSupportedFormats.EAN_13,
                 Html5QrcodeSupportedFormats.CODE_128,
-                Html5QrcodeSupportedFormats.QR_CODE
+                Html5QrcodeSupportedFormats.PDF_417,
+                Html5QrcodeSupportedFormats.QR_CODE,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E
             ]
         };
 
@@ -512,3 +516,4 @@
     </script>
 </body>
 </html>
+
