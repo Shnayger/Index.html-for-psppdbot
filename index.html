@@ -76,12 +76,12 @@
             border-right: 4px solid white;
             border-bottom: 4px solid white;
         }
-        /* Подсказка - ПЕРЕМЕЩЕНА НИЖЕ */
+        /* Подсказка */
         #scan-hint {
             position: absolute;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, 160px); /* Сместили ниже квадрата */
+            transform: translate(-50%, 160px);
             width: 260px;
             text-align: center;
             color: white;
@@ -94,14 +94,14 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
         }
 
-        /* Блок результатов - УВЕЛИЧЕН */
+        /* Блок результатов */
         #results-container {
             background: rgba(25, 25, 25, 0.95);
             border-top: 1px solid #444;
             border-bottom: 1px solid #444;
             padding: 12px;
             min-height: 120px;
-            max-height: 140px; /* Увеличенная высота */
+            max-height: 140px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
@@ -264,11 +264,8 @@
 
         // Функция прокрутки к последнему результату
         function scrollToLastResult() {
-            // Используем requestAnimationFrame для гарантированной прокрутки после добавления DOM
             requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    resultsContainer.scrollTop = resultsContainer.scrollHeight;
-                });
+                resultsContainer.scrollTop = resultsContainer.scrollHeight;
             });
         }
 
@@ -301,12 +298,9 @@
             
             // Прокручиваем к последнему результату
             scrollToLastResult();
-            
-            // Обновляем подсказку
-            updateScanHint();
         }
 
-        // Функция обновления подсказки
+        // Функция обновления подсказки - ТЕПЕРЬ ВЫЗЫВАЕТСЯ ПРАВИЛЬНО
         function updateScanHint() {
             if (step === 'datamatrix') {
                 scanHintEl.textContent = 'Наведите на DataMatrix';
@@ -333,17 +327,19 @@
             updateScanHint();
         }
 
-        // Обработчик сканирования
+        // Обработчик сканирования - ИСПРАВЛЕНА ЛОГИКА СМЕНЫ ШАГОВ
         function onScanSuccess(decodedText) {
             const code = decodedText.trim();
-            console.log('Считанный код:', code, 'Длина:', code.length, 'Шаг:', step);
+            console.log('Считанный код:', code, 'Длина:', code.length, 'Текущий шаг:', step);
             
             let isValid = false;
+            let type = '';
 
             if (step === 'datamatrix') {
                 // Проверяем DataMatrix (длины 22, 30 или 35 символов)
                 if ([22, 30, 35].includes(code.length)) {
                     isValid = true;
+                    type = 'datamatrix';
                     let resultText = '';
                     
                     if (code.length === 22) {
@@ -359,7 +355,7 @@
                         resultText = `DataMatrix: ${code}`;
                     }
                     
-                    addResult(resultText, 'datamatrix');
+                    addResult(resultText, type);
                     step = 'barcode'; // Следующий шаг - штрих-код
                     
                     // Визуальная обратная связь
@@ -374,7 +370,8 @@
                 // Проверяем штрих-код (13 цифр)
                 if (/^\d{13}$/.test(code)) {
                     isValid = true;
-                    addResult(`Штрих-код: ${code}`, 'barcode');
+                    type = 'barcode';
+                    addResult(`Штрих-код: ${code}`, type);
                     step = 'datamatrix'; // Следующий шаг - DataMatrix
                     
                     // Визуальная обратная связь
@@ -390,7 +387,12 @@
             // Если код не подходит под ожидаемый формат, игнорируем его
             if (!isValid) {
                 console.log('Код не подходит под ожидаемый формат:', code);
+                return; // Не обновляем подсказку если сканирование не удалось
             }
+            
+            // ОБНОВЛЯЕМ ПОДСКАЗКУ ТОЛЬКО ПОСЛЕ УСПЕШНОГО СКАНИРОВАНИЯ
+            updateScanHint();
+            console.log('Новый шаг после сканирования:', step, 'Подсказка:', scanHintEl.textContent);
         }
 
         // Начало сканирования
@@ -422,7 +424,7 @@
                         }
                     ).then(() => {
                         isScanning = true;
-                        console.log('Сканер запущен');
+                        console.log('Сканер запущен, начальный шаг:', step);
                     }).catch(err => {
                         console.error("Ошибка запуска камеры:", err);
                         scanHintEl.textContent = 'Ошибка камеры. Проверьте разрешения.';
@@ -504,17 +506,6 @@
                 border: none !important;
                 outline: none !important;
                 box-shadow: none !important;
-            }
-            
-            /* Анимация для подсказки */
-            @keyframes hintPulse {
-                0% { transform: translate(-50%, 160px) scale(1); }
-                50% { transform: translate(-50%, 160px) scale(1.02); }
-                100% { transform: translate(-50%, 160px) scale(1); }
-            }
-            
-            .hint-pulse {
-                animation: hintPulse 0.3s ease-in-out;
             }
         `;
         document.head.appendChild(style);
