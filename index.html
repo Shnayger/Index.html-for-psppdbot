@@ -46,6 +46,7 @@
         }
         .datamatrix { background-color: #e3f2fd; border-left: 4px solid #2196f3; }
         .barcode { background-color: #f1f8e9; border-left: 4px solid #4caf50; }
+        .parsed { background-color: #fff3e0; border-left: 4px solid #ff9800; }
         #status {
             margin-top: 12px;
             font-size: 16px;
@@ -84,9 +85,6 @@
         button:hover {
             opacity: 0.9;
         }
-        button:active {
-            transform: scale(0.98);
-        }
     </style>
 </head>
 <body>
@@ -107,15 +105,17 @@
             Telegram.WebApp.ready();
         }
 
-        let step = 'datamatrix';
+        let step = 'datamatrix'; // 'datamatrix' или 'barcode'
+        let isScanning = true; // Флаг активного сканирования
         const resultsEl = document.getElementById('results');
         const statusEl = document.getElementById('status');
+        const readerEl = document.getElementById('reader');
 
         // Функция добавления результата
-        function addResult(type, text) {
+        function addResult(type, text, extra = '') {
             const div = document.createElement('div');
             div.className = `result-item ${type}`;
-            div.textContent = `${type === 'datamatrix' ? '📦 DataMatrix:' : '🛒 GTIN:'} ${text}`;
+            div.textContent = `${text}${extra ? ' → ' + extra : ''}`;
             resultsEl.appendChild(div);
             resultsEl.scrollTop = resultsEl.scrollHeight;
         }
@@ -124,12 +124,14 @@
         function clearResults() {
             resultsEl.innerHTML = '';
             step = 'datamatrix';
+            isScanning = true;
             statusEl.textContent = 'Наведите камеру на DataMatrix';
+            // Перезапуск сканера (если нужно)
         }
 
         // Конфигурация сканера
         const config = {
-            fps: 12,
+            fps: 10,
             qrbox: { width: 250, height: 250 },
             aspectRatio: 1.7777778,
             disableFlip: false,
@@ -144,25 +146,54 @@
             { facingMode: "environment" },
             config,
             (decodedText) => {
+                // Защита от повторного сканирования
+                if (!isScanning) return;
+
                 const code = decodedText.trim();
                 if (step === 'datamatrix') {
-                    addResult('datamatrix', code);
-                    statusEl.textContent = '✅ DataMatrix распознан. Наведите на штрих-код.';
-                    step = 'barcode';
+                    isScanning = false; // Останавливаем сканирование
+                    addResult('datamatrix', '📦 DataMatrix:', code);
+
+                    // === ПАРСИНГ ===
+                    if (code.length === 22) {
+                        const uniqueId = code.substring(0, 9);
+                        const gtin = code.substring(9, 22);
+                        addResult('parsed', '🔢 Уникальный ID:', uniqueId);
+                        addResult('parsed', '🏷️ GTIN:', gtin);
+                        statusEl.textContent = '✅ DataMatrix распознан. Наведите на штрих-код.';
+                        step = 'barcode';
+                        isScanning = true; // Возобновляем сканирование для штрих-кода
+                    } else if (code.length === 30) {
+                        const number = code.substring(18, 27);
+                        const series = code.substring(27, 30);
+                        addResult('parsed', '🔢 Номер УКЗ:', number);
+                        addResult('parsed', '🔤 Серия УКЗ:', series);
+                        statusEl.textContent = '✅ УКЗ распознан. Наведите на штрих-код.';
+                        step = 'barcode';
+                        isScanning = true;
+                    } else if (code.length === 35) {
+                        const gtin = code.substring(3, 16);
+                        addResult('parsed', '🏷️ GTIN из СИ:', gtin);
+                        statusEl.textContent = '✅ СИ распознан. Наведите на штрих-код.';
+                        step = 'barcode';
+                        isScanning = true;
+                    } else {
+                        statusEl.textContent = `❌ Неизвестный формат (${code.length} символов)`;
+                        isScanning = true;
+                    }
                 } else if (step === 'barcode') {
-                    addResult('barcode', code);
+                    isScanning = false; // Останавливаем после штрих-кода
+                    addResult('barcode', '🛒 Штрих-код:', code);
                     statusEl.textContent = '✅ Сканирование завершено!';
                     
                     // Автоматический сброс через 3 секунды
                     setTimeout(() => {
-                        if (step === 'barcode') {
-                            clearResults();
-                        }
-                    }, 300000);
+                        clearResults();
+                    }, 30000);
                 }
             },
             (errorMessage) => {
-                // Игнорируем ошибки сканирования (они нормальны при поиске кода)
+                // Игнорируем ошибки сканирования
             }
         ).catch(err => {
             statusEl.textContent = "❌ Ошибка камеры";
@@ -170,7 +201,18 @@
         });
 
         // Кнопки
-        document.getElementById('clear-btn').onclick = clearResults;
+        document.getElementById('clear-btn').onclick = () => {
+            html5QrCode.stop().then(() => {
+                clearResults();
+                // Перезапуск сканера
+                html5QrCode.start(
+                    { facingMode: "environment" },
+                    config,
+                    (decodedText) => { /* тот же callback */ },
+                    (err) => {}
+                );
+            });
+        };
         
         document.getElementById('finish-btn').onclick = () => {
             html5QrCode.stop().then(() => {
@@ -182,4 +224,3 @@
     </script>
 </body>
 </html>
-
