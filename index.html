@@ -34,15 +34,21 @@
             min-height: 0;
             background: #000;
         }
+        /* Контейнер для видео */
+        #qr-reader {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
         /* Уголки квадрата для сканирования */
         .corner {
             position: absolute;
             pointer-events: none;
             z-index: 10;
-        }
-        .corner-tl {
             top: 50%;
             left: 50%;
+        }
+        .corner-tl {
             transform: translate(-120px, -120px);
             width: 40px;
             height: 40px;
@@ -50,8 +56,6 @@
             border-top: 4px solid white;
         }
         .corner-tr {
-            top: 50%;
-            left: 50%;
             transform: translate(80px, -120px);
             width: 40px;
             height: 40px;
@@ -59,8 +63,6 @@
             border-top: 4px solid white;
         }
         .corner-bl {
-            top: 50%;
-            left: 50%;
             transform: translate(-120px, 80px);
             width: 40px;
             height: 40px;
@@ -68,8 +70,6 @@
             border-bottom: 4px solid white;
         }
         .corner-br {
-            top: 50%;
-            left: 50%;
             transform: translate(80px, 80px);
             width: 40px;
             height: 40px;
@@ -213,7 +213,7 @@
         const resultsEl = document.getElementById('results');
         const scanHintEl = document.getElementById('scan-hint');
         
-        // Конфигурация сканера - УПРОЩЕННАЯ версия
+        // Конфигурация сканера
         const config = {
             fps: 10,
             qrbox: {
@@ -223,23 +223,10 @@
             rememberLastUsedCamera: true,
             supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
             formatsToSupport: [
-                Html5QrcodeSupportedFormats.QR_CODE,
-                Html5QrcodeSupportedFormats.AZTEC,
-                Html5QrcodeSupportedFormats.CODABAR,
-                Html5QrcodeSupportedFormats.CODE_39,
-                Html5QrcodeSupportedFormats.CODE_93,
-                Html5QrcodeSupportedFormats.CODE_128,
                 Html5QrcodeSupportedFormats.DATA_MATRIX,
-                Html5QrcodeSupportedFormats.MAXICODE,
-                Html5QrcodeSupportedFormats.ITF,
                 Html5QrcodeSupportedFormats.EAN_13,
-                Html5QrcodeSupportedFormats.EAN_8,
-                Html5QrcodeSupportedFormats.PDF_417,
-                Html5QrcodeSupportedFormats.RSS_14,
-                Html5QrcodeSupportedFormats.RSS_EXPANDED,
-                Html5QrcodeSupportedFormats.UPC_A,
-                Html5QrcodeSupportedFormats.UPC_E,
-                Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.QR_CODE
             ]
         };
 
@@ -276,9 +263,6 @@
             resultsEl.scrollTop = resultsEl.scrollHeight;
             
             scanCount++;
-            
-            // Обновляем подсказку
-            updateScanHint();
         }
 
         // Функция обновления подсказки
@@ -292,6 +276,12 @@
                 scanHintEl.style.color = '#4da6ff';
                 scanHintEl.style.borderColor = 'rgba(77, 166, 255, 0.3)';
             }
+            
+            // Визуальный эффект смены подсказки
+            scanHintEl.style.opacity = '0.7';
+            setTimeout(() => {
+                scanHintEl.style.opacity = '1';
+            }, 300);
         }
 
         // Функция очистки результатов
@@ -330,6 +320,7 @@
                     
                     addResult(resultText, 'datamatrix');
                     step = 'barcode'; // Следующий шаг - штрих-код
+                    updateScanHint(); // Обновляем подсказку
                     
                     // Визуальная обратная связь
                     scanHintEl.style.background = 'rgba(0, 100, 0, 0.8)';
@@ -343,6 +334,7 @@
                     isValid = true;
                     addResult(`Штрих-код: ${code}`, 'barcode');
                     step = 'datamatrix'; // Следующий шаг - DataMatrix
+                    updateScanHint(); // Обновляем подсказку
                     
                     // Визуальная обратная связь
                     scanHintEl.style.background = 'rgba(0, 0, 100, 0.8)';
@@ -447,9 +439,23 @@
         // Запускаем сканер при загрузке
         startScanner();
 
-        // Добавляем CSS для визуальной обратной связи
+        // Добавляем CSS для скрытия дублирующего квадрата сканера
         const style = document.createElement('style');
         style.textContent = `
+            /* Скрываем стандартный квадрат сканера библиотеки */
+            #qr-reader__dashboard_section,
+            #qr-reader__camera_permission_button,
+            #qr-reader__scan_region {
+                display: none !important;
+            }
+            
+            /* Скрываем рамку сканера */
+            #qr-reader video {
+                width: 100% !important;
+                height: 100% !important;
+                object-fit: cover !important;
+            }
+            
             @keyframes scanSuccess {
                 0% { transform: translate(-50%, 100px) scale(1); }
                 50% { transform: translate(-50%, 100px) scale(1.05); }
@@ -457,6 +463,13 @@
             }
             .scan-success {
                 animation: scanSuccess 0.3s ease-in-out;
+            }
+            
+            /* Убираем все рамки и границы от библиотеки */
+            #qr-reader > * {
+                border: none !important;
+                outline: none !important;
+                box-shadow: none !important;
             }
         `;
         document.head.appendChild(style);
