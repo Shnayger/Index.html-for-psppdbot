@@ -31,12 +31,8 @@
             width: 100%;
             flex: 1;
             overflow: hidden;
-            min-height: 0; /* Для корректной работы flex */
-        }
-        #reader {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+            min-height: 0;
+            background: #000;
         }
         /* Уголки квадрата для сканирования */
         .corner {
@@ -90,10 +86,11 @@
             text-align: center;
             color: white;
             font-size: 14px;
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.7);
             padding: 8px 12px;
             border-radius: 8px;
             z-index: 10;
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         /* Блок результатов */
@@ -174,7 +171,7 @@
     <div id="app">
         <!-- Блок камеры -->
         <div id="video-container">
-            <div id="reader"></div>
+            <div id="qr-reader"></div>
             <!-- Уголки квадрата -->
             <div class="corner corner-tl"></div>
             <div class="corner corner-tr"></div>
@@ -216,19 +213,39 @@
         const resultsEl = document.getElementById('results');
         const scanHintEl = document.getElementById('scan-hint');
         
-        // Конфигурация сканера
+        // Конфигурация сканера - УПРОЩЕННАЯ версия
         const config = {
             fps: 10,
-            qrbox: { width: 240, height: 240 },
-            aspectRatio: 1.7777778,
-            disableFlip: false,
-            experimentalFeatures: {
-                useBarCodeDetectorIfSupported: true
-            }
+            qrbox: {
+                width: 240,
+                height: 240
+            },
+            rememberLastUsedCamera: true,
+            supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.QR_CODE,
+                Html5QrcodeSupportedFormats.AZTEC,
+                Html5QrcodeSupportedFormats.CODABAR,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.CODE_93,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.DATA_MATRIX,
+                Html5QrcodeSupportedFormats.MAXICODE,
+                Html5QrcodeSupportedFormats.ITF,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.PDF_417,
+                Html5QrcodeSupportedFormats.RSS_14,
+                Html5QrcodeSupportedFormats.RSS_EXPANDED,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION
+            ]
         };
 
         // Инициализация сканера
-        const html5QrCode = new Html5Qrcode("reader");
+        const html5QrCode = new Html5Qrcode("qr-reader");
+        let isScanning = false;
 
         // Функция добавления результата сканирования
         function addResult(text, type) {
@@ -269,9 +286,11 @@
             if (step === 'datamatrix') {
                 scanHintEl.textContent = 'Наведите на DataMatrix';
                 scanHintEl.style.color = '#00ff9d';
+                scanHintEl.style.borderColor = 'rgba(0, 255, 157, 0.3)';
             } else {
                 scanHintEl.textContent = 'Наведите на штрих-код';
                 scanHintEl.style.color = '#4da6ff';
+                scanHintEl.style.borderColor = 'rgba(77, 166, 255, 0.3)';
             }
         }
 
@@ -286,6 +305,8 @@
         // Обработчик сканирования
         function onScanSuccess(decodedText) {
             const code = decodedText.trim();
+            console.log('Считанный код:', code, 'Длина:', code.length, 'Шаг:', step);
+            
             let isValid = false;
 
             if (step === 'datamatrix') {
@@ -303,10 +324,18 @@
                     } else if (code.length === 35) {
                         const gtin = code.substring(3, 16);
                         resultText = `DataMatrix: ${code} (GTIN СИ: ${gtin})`;
+                    } else {
+                        resultText = `DataMatrix: ${code}`;
                     }
                     
                     addResult(resultText, 'datamatrix');
                     step = 'barcode'; // Следующий шаг - штрих-код
+                    
+                    // Визуальная обратная связь
+                    scanHintEl.style.background = 'rgba(0, 100, 0, 0.8)';
+                    setTimeout(() => {
+                        scanHintEl.style.background = 'rgba(0, 0, 0, 0.7)';
+                    }, 300);
                 }
             } else if (step === 'barcode') {
                 // Проверяем штрих-код (13 цифр)
@@ -314,66 +343,120 @@
                     isValid = true;
                     addResult(`Штрих-код: ${code}`, 'barcode');
                     step = 'datamatrix'; // Следующий шаг - DataMatrix
+                    
+                    // Визуальная обратная связь
+                    scanHintEl.style.background = 'rgba(0, 0, 100, 0.8)';
+                    setTimeout(() => {
+                        scanHintEl.style.background = 'rgba(0, 0, 0, 0.7)';
+                    }, 300);
                 }
             }
-
-            // Если сканирование успешно, ненадолго подсвечиваем подсказку
-            if (isValid) {
-                scanHintEl.style.animation = 'none';
-                setTimeout(() => {
-                    scanHintEl.style.animation = 'pulse 0.5s';
-                }, 10);
-                
-                // Кратковременно останавливаем сканирование для предотвращения повторного считывания
-                setTimeout(() => {
-                    // Автоматическое продолжение сканирования
-                }, 500);
+            
+            // Если код не подходит под ожидаемый формат, игнорируем его
+            if (!isValid) {
+                console.log('Код не подходит под ожидаемый формат:', code);
             }
         }
 
         // Начало сканирования
-        html5QrCode.start(
-            { facingMode: "environment" },
-            config,
-            onScanSuccess,
-            (errorMessage) => {
-                // Игнорируем ошибки, кроме критических
-                if (errorMessage.includes('No camera found') || errorMessage.includes('Permission denied')) {
-                    console.error('Ошибка камеры:', errorMessage);
+        function startScanner() {
+            if (isScanning) return;
+            
+            Html5Qrcode.getCameras().then(devices => {
+                if (devices && devices.length) {
+                    let cameraId = devices[0].id;
+                    // Пытаемся найти заднюю камеру
+                    const backCamera = devices.find(device => 
+                        device.label.toLowerCase().includes('back') || 
+                        device.label.toLowerCase().includes('rear') ||
+                        device.label.includes('2') || // Часто задняя камера под индексом 2
+                        device.label.includes('1') && !device.label.toLowerCase().includes('front')
+                    );
+                    
+                    if (backCamera) {
+                        cameraId = backCamera.id;
+                    }
+                    
+                    html5QrCode.start(
+                        cameraId,
+                        config,
+                        onScanSuccess,
+                        (errorMessage) => {
+                            // Игнорируем большинство ошибок сканирования
+                            console.log('Ошибка сканирования (игнорируем):', errorMessage);
+                        }
+                    ).then(() => {
+                        isScanning = true;
+                        console.log('Сканер запущен');
+                    }).catch(err => {
+                        console.error("Ошибка запуска камеры:", err);
+                        scanHintEl.textContent = 'Ошибка камеры. Проверьте разрешения.';
+                        scanHintEl.style.color = '#ff4444';
+                    });
+                } else {
+                    console.error('Камеры не найдены');
+                    scanHintEl.textContent = 'Камера не найдена';
+                    scanHintEl.style.color = '#ff4444';
                 }
-            }
-        ).catch(err => {
-            console.error("Ошибка инициализации камеры:", err);
-            scanHintEl.textContent = 'Ошибка камеры. Проверьте разрешения.';
-            scanHintEl.style.color = '#ff4444';
-        });
+            }).catch(err => {
+                console.error('Ошибка получения камер:', err);
+                // Пробуем запустить с настройками по умолчанию
+                html5QrCode.start(
+                    { facingMode: "environment" },
+                    config,
+                    onScanSuccess,
+                    (errorMessage) => {
+                        console.log('Ошибка сканирования:', errorMessage);
+                    }
+                ).then(() => {
+                    isScanning = true;
+                }).catch(err2 => {
+                    console.error('Не удалось запустить камеру:', err2);
+                    scanHintEl.textContent = 'Не удалось запустить камеру';
+                    scanHintEl.style.color = '#ff4444';
+                });
+            });
+        }
 
         // Обработчики кнопок
         document.getElementById('clear-btn').onclick = clearResults;
         
         document.getElementById('finish-btn').onclick = () => {
-            html5QrCode.stop().then(() => {
+            if (isScanning) {
+                html5QrCode.stop().then(() => {
+                    isScanning = false;
+                    if (window.Telegram && Telegram.WebApp) {
+                        Telegram.WebApp.close();
+                    }
+                }).catch(err => {
+                    console.error('Ошибка при остановке камеры:', err);
+                    if (window.Telegram && Telegram.WebApp) {
+                        Telegram.WebApp.close();
+                    }
+                });
+            } else {
                 if (window.Telegram && Telegram.WebApp) {
                     Telegram.WebApp.close();
                 }
-            }).catch(err => {
-                console.error('Ошибка при остановке камеры:', err);
-                if (window.Telegram && Telegram.WebApp) {
-                    Telegram.WebApp.close();
-                }
-            });
+            }
         };
 
         // Инициализация подсказки
         updateScanHint();
 
-        // Добавляем анимацию для подсказки
+        // Запускаем сканер при загрузке
+        startScanner();
+
+        // Добавляем CSS для визуальной обратной связи
         const style = document.createElement('style');
         style.textContent = `
-            @keyframes pulse {
-                0% { background-color: rgba(0, 0, 0, 0.6); }
-                50% { background-color: rgba(0, 100, 0, 0.8); }
-                100% { background-color: rgba(0, 0, 0, 0.6); }
+            @keyframes scanSuccess {
+                0% { transform: translate(-50%, 100px) scale(1); }
+                50% { transform: translate(-50%, 100px) scale(1.05); }
+                100% { transform: translate(-50%, 100px) scale(1); }
+            }
+            .scan-success {
+                animation: scanSuccess 0.3s ease-in-out;
             }
         `;
         document.head.appendChild(style);
