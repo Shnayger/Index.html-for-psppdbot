@@ -23,36 +23,69 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
-            padding: 0;
         }
         #video-container {
             position: relative;
             width: 100%;
-            height: calc(100% - 140px); /* Оставляем место под статус и кнопки */
+            height: calc(100% - 180px); /* Оставляем место под результаты и кнопки */
             overflow: hidden;
         }
         #reader {
             width: 100%;
             height: 100%;
-            object-fit: cover; /* ← Важно: заполняет весь контейнер */
+            object-fit: cover;
         }
-        #overlay {
+        /* Квадрат наводки */
+        #scan-frame {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 50%;
+            left: 50%;
+            width: 220px;
+            height: 220px;
+            transform: translate(-50%, -50%);
+            border: 3px solid #00ff41;
+            border-radius: 12px;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
             pointer-events: none;
-            /* Можно добавить полупрозрачную маску, если нужно */
+            z-index: 10;
         }
-        #status {
-            padding: 12px;
-            text-align: center;
-            font-size: 16px;
-            font-weight: bold;
+        /* Угловые маркеры (как в настоящих сканерах) */
+        .corner {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            border-color: #00ff41;
+            border-style: solid;
+        }
+        .corner-tl { top: -3px; left: -3px; border-width: 3px 0 0 3px; }
+        .corner-tr { top: -3px; right: -3px; border-width: 3px 3px 0 0; }
+        .corner-bl { bottom: -3px; left: -3px; border-width: 0 0 3px 3px; }
+        .corner-br { bottom: -3px; right: -3px; border-width: 0 3px 3px 0; }
+
+        /* Поле результатов */
+        #results {
+            padding: 10px;
+            min-height: 70px;
+            max-height: 100px;
+            overflow-y: auto;
             background: rgba(0, 0, 0, 0.7);
             backdrop-filter: blur(4px);
+            font-size: 14px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-all;
         }
+
+        /* Статус */
+        #status {
+            padding: 10px;
+            text-align: center;
+            font-size: 15px;
+            font-weight: bold;
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        /* Кнопки */
         #controls {
             display: flex;
             gap: 10px;
@@ -85,11 +118,16 @@
     <div id="app">
         <div id="video-container">
             <div id="reader"></div>
-            <div id="overlay"></div>
+            <div id="scan-frame">
+                <div class="corner corner-tl"></div>
+                <div class="corner corner-tr"></div>
+                <div class="corner corner-bl"></div>
+                <div class="corner corner-br"></div>
+            </div>
         </div>
         
-        <div id="status">Наведите камеру на DataMatrix</div>
-        
+        <div id="results"></div>
+        <div id="status">Наведите DataMatrix в квадрат</div>
         <div id="controls">
             <button id="clear-btn">🗑️ Очистить</button>
             <button id="finish-btn">✅ Завершить</button>
@@ -102,18 +140,26 @@
         }
 
         let step = 'datamatrix';
+        const resultsEl = document.getElementById('results');
         const statusEl = document.getElementById('status');
 
-        // Функция очистки
-        function clearResults() {
-            step = 'datamatrix';
-            statusEl.textContent = 'Наведите камеру на DataMatrix';
+        function addResult(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            resultsEl.appendChild(div);
+            resultsEl.scrollTop = resultsEl.scrollHeight;
         }
 
-        // Конфигурация: БЕЗ qrbox!
+        function clearResults() {
+            resultsEl.innerHTML = '';
+            step = 'datamatrix';
+            statusEl.textContent = 'Наведите DataMatrix в квадрат';
+        }
+
+        // Конфигурация: Включаем qrbox для лучшего распознавания
         const config = {
             fps: 12,
-            // qrbox отключён → сканирование по всему экрану
+            qrbox: { width: 220, height: 220 }, // ← Размер квадрата
             aspectRatio: 1.7777778,
             disableFlip: false,
             experimentalFeatures: {
@@ -130,24 +176,30 @@
 
                 if (step === 'datamatrix') {
                     if ([22, 30, 35].includes(code.length)) {
-                        // Парсинг
-                        let msg = '✅ DataMatrix распознан';
+                        addResult(`📦 DataMatrix: ${code}`);
+                        
+                        let msg = '✅ Распознан';
                         if (code.length === 22) {
                             const gtin = code.substring(9, 22);
+                            addResult(`🏷️ GTIN: ${gtin}`);
                             msg += ` (GTIN: ${gtin})`;
                         } else if (code.length === 30) {
                             const series = code.substring(27, 30);
+                            addResult(`🔤 Серия: ${series}`);
                             msg += ` (УКЗ: ${series})`;
                         } else if (code.length === 35) {
                             const gtin = code.substring(3, 16);
-                            msg += ` (СИ GTIN: ${gtin})`;
+                            addResult(`🏷️ GTIN: ${gtin}`);
+                            msg += ` (СИ)`;
                         }
-                        statusEl.textContent = msg + '. Наведите на штрих-код.';
+                        
+                        statusEl.textContent = `${msg}. Наведите штрих-код.`;
                         step = 'barcode';
                     }
                 } else if (step === 'barcode') {
                     if (/^\d{13}$/.test(code)) {
-                        statusEl.textContent = '✅ Верно! Сканирование завершено.';
+                        addResult(`🛒 Штрих-код: ${code}`);
+                        statusEl.textContent = '✅ Верно!';
                         setTimeout(() => {
                             clearResults();
                         }, 2500);
