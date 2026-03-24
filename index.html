@@ -697,14 +697,7 @@
         startScanner();
 
         // Автоматически показываем лог при ошибках
-        //setTimeout(() => {
-          //  logConsole.style.display = 'block';
-            //logBtn.style.background = 'linear-gradient(135deg, #4a5568, #2d3748)';
-            //logToConsole('Система запущена. Готов к сканированию.', 'success');
-            //logToConsole('1. Сначала сканируйте DataMatrix', 'info');
-            //logToConsole('2. Затем сканируйте штрих-код', 'info');
-            //logToConsole('3. Повторяйте цикл', 'info');
-        //}, 1500);
+        logToConsole('Система запущена. Готов к сканированию.', 'success');
 
         // CSS для скрытия интерфейса библиотеки
         const style = document.createElement('style');
